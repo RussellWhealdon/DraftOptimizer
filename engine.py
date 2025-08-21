@@ -14,21 +14,33 @@ default_settings: Dict = {
 }
 
 def normalize_players(players_df: pd.DataFrame) -> pd.DataFrame:
-	df = players_df.copy()
-	rename_map = {
-		"Name": "name",
-		"Pos": "pos",
-		"Team": "team_nfl",
-		"ADP": "adp_overall",
-		"Tier": "tier",
-		"Point Proj": "proj_points",
-		"ECR Rank": "ecr_rank",
-		"BYE": "bye_week",
-	}
-	df = df.rename(columns=rename_map)
-	if "player_id" not in df.columns:
-		df["player_id"] = [str(1000000 + i) for i in range(len(df))]
-	return df
+    # Expect player_id to already exist in the CSV
+    required_id = "player_id"
+    if required_id not in players_df.columns:
+        raise ValueError("players_df must contain 'player_id' column from the CSV. No IDs will be generated.")
+
+    # Standardize expected column names; keep player_id untouched
+    rename_map = {
+        "Name": "name",
+        "Pos": "pos",
+        "Team": "team_nfl",
+        "ADP": "adp_overall",
+        "Tier": "tier",
+        "Point Proj": "proj_points",
+        "ECR Rank": "ecr_rank",
+        "BYE": "bye_week",
+    }
+    df = players_df.rename(columns=rename_map).copy()
+
+    # Ensure types (only cast, do not alter values)
+    df["player_id"] = df["player_id"].astype(str)
+
+    # Optional: coerce numeric columns if present
+    for col in ["adp_overall", "proj_points", "ecr_rank", "bye_week", "tier"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
 
 def default_draft_log() -> pd.DataFrame:
 	# Build full snake grid
