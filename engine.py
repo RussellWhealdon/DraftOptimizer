@@ -235,25 +235,42 @@ def compute_availability(
 ) -> pd.DataFrame:
 	positions = settings.get("positions", ["QB", "RB", "WR", "TE", "K", "DEF"])
 	players = normalize_players(players_df)
+
+	# Remaining players
 	drafted_players = draft_log_df[draft_log_df["player_id"].notna()]["player_id"].astype(str).tolist()
 	players["player_id"] = players["player_id"].astype(str)
 	remaining_players = players[~players["player_id"].isin(drafted_players)].copy()
 	if remaining_players.empty:
 		return pd.DataFrame(columns=["player_id","Name","Pos","Tier","ADP","Proj_Points","P_survive_to_next_pick","ADP_Value","Proj_Value","Notes"])
+
+	# Ranking cols
 	adp_col = "adp_overall" if "adp_overall" in remaining_players.columns else ("ADP" if "ADP" in remaining_players.columns else None)
 	proj_col = "proj_points" if "proj_points" in remaining_players.columns else ("Point Proj" if "Point Proj" in remaining_players.columns else None)
 	if adp_col:
 		remaining_players = remaining_players.sort_values(adp_col).head(top_n)
+
+	# Current pick (next unfilled slot on the board)
 	current_pick = int(draft_log_df[draft_log_df["player_id"].isna()]["overall_pick"].min())
+
+	# My pick slots and next one (always look strictly after current_pick)
 	my_pick_slots = get_team_pick_slots(my_team_slot, settings["num_teams"], settings["num_rounds"])
+	on_the_clock = current_pick in my_pick_slots
+
+	# Find the next of my picks that is unfilled and strictly after current pick
 	my_next_pick = None
-	for pick_num in sorted(my_pick_slots):
-		row = draft_log_df[draft_log_df["overall_pick"] == pick_num]
-		if not row.empty and pd.isna(row.iloc[0]["player_id"]):
-			my_next_pick = pick_num
-			break
+	for p in my_pick_slots:
+		if p > current_pick:
+			row = draft_log_df[draft_log_df["overall_pick"] == p]
+			if not row.empty and pd.isna(row.iloc[0]["player_id"]):
+				my_next_pick = p
+				break
 	if my_next_pick is None:
 		return pd.DataFrame(columns=["player_id","Name","Pos","Tier","ADP","Proj_Points","P_survive_to_next_pick","ADP_Value","Proj_Value","Notes"])
+
+	# If it's my pick now, start sim from the pick AFTER my current pick
+	intervening_start = current_pick + 1 if on_the_clock else current_pick
+
+	# Fresh roster counts + propensities
 	roster_counts = derive_roster_counts(draft_log_df, players, positions)
 	prop = compute_needs_and_propensities(
 		roster_counts=roster_counts,
@@ -265,29 +282,36 @@ def compute_availability(
 		use_internal_tier_pressure=True,
 		tier_bonus_if_last=0.30,
 	)
+
 	results: List[Dict] = []
 	for _, player in remaining_players.iterrows():
 		survival_prob = 1.0
 		pos_col = "pos" if "pos" in player else "Pos"
 		tier_col = "tier" if "tier" in player else "Tier"
 		name_col = "name" if "name" in player else "Name"
-		for pick_num in range(current_pick, my_next_pick):
+
+		for pick_num in range(intervening_start, my_next_pick):
 			round_num = (pick_num - 1) // settings["num_teams"] + 1
 			if round_num % 2 == 1:
 				team_picking = pick_num - (round_num - 1) * settings["num_teams"]
 			else:
 				team_picking = settings["num_teams"] - (pick_num - (round_num - 1) * settings["num_teams"]) + 1
+
 			team_props = prop[prop["team_slot"] == team_picking].iloc[0]
+
 			if adp_col:
 				sorted_players = remaining_players.sort_values(adp_col)
 				player_rank = sorted_players.index.get_loc(player.name) + 1
 			else:
 				player_rank = remaining_players.index.get_loc(player.name) + 1
 			base_weight = 1.0 / (player_rank ** 0.5)
+
 			pos_propensity = team_props[f"propensity_{player[pos_col]}"]
 			same_tier = remaining_players[remaining_players[tier_col] == player[tier_col]]
 			tier_bonus = 1.3 if len(same_tier) <= 2 else 1.0
+
 			pick_prob = base_weight * pos_propensity * tier_bonus
+
 			total_weight = 0.0
 			for _, other in remaining_players.iterrows():
 				if adp_col:
@@ -301,14 +325,18 @@ def compute_availability(
 				other_same_tier = remaining_players[remaining_players[tier_col] == other[tier_col]]
 				other_tier_bonus = 1.3 if len(other_same_tier) <= 2 else 1.0
 				total_weight += other_base * other_pos_prop * other_tier_bonus
+
 			if total_weight > 0:
 				pick_prob = pick_prob / total_weight
+
 			survival_prob *= (1 - pick_prob)
+
 		adp_value = player[adp_col] if adp_col else None
 		proj_value = player[proj_col] if proj_col else None
 		pick_probability = 1.0 - survival_prob
 		adp_value_calc = (pick_probability * adp_value) if adp_value is not None else None
 		proj_value_calc = (pick_probability * proj_value) if proj_value is not None else None
+
 		results.append({
 			"player_id": player["player_id"],
 			"Name": player[name_col],
@@ -321,4 +349,5 @@ def compute_availability(
 			"Proj_Value": proj_value_calc,
 			"Notes": "",
 		})
+
 	return pd.DataFrame(results).sort_values("P_survive_to_next_pick", ascending=True)
