@@ -30,194 +30,44 @@ def normalize_players(players_df: pd.DataFrame) -> pd.DataFrame:
 		df["player_id"] = [str(1000000 + i) for i in range(len(df))]
 	return df
 
-# --- 2) Draft log DataFrame TEMPLATE ---
-draft_log_cols = [
-    ("overall_pick", "Int64"),  # 1..(num_teams * num_rounds)
-    ("round", "Int64"),
-    ("team_slot", "Int64"),     # 1..num_teams
-    ("player_id", "string"),    # filled once picked; NaN for future picks
-]
-
-draft_log_template = pd.DataFrame({c: pd.Series(dtype=t) for c, t in draft_log_cols})
-
-# Create a tiny demo for a 10-team snake draft, first ~2 rounds partially filled
-demo_draft_log = pd.DataFrame([
-    # round 1 (slots 1..10)
-    {"overall_pick": 1, "round": 1, "team_slot": 1, "player_id": None},
-    {"overall_pick": 2, "round": 1, "team_slot": 2, "player_id": None},
-    {"overall_pick": 3, "round": 1, "team_slot": 3, "player_id": None},
-    {"overall_pick": 4, "round": 1, "team_slot": 4, "player_id": None},
-    {"overall_pick": 5, "round": 1, "team_slot": 5, "player_id": None},
-    {"overall_pick": 6, "round": 1, "team_slot": 6, "player_id": None},
-    {"overall_pick": 7, "round": 1, "team_slot": 7, "player_id": None},
-    {"overall_pick": 8, "round": 1, "team_slot": 8, "player_id": None},
-    {"overall_pick": 9, "round": 1, "team_slot": 9, "player_id": None},
-    {"overall_pick": 10, "round": 1, "team_slot": 10, "player_id": None},
-    # round 2 (snake: slots 10..1)
-    {"overall_pick": 11, "round": 2, "team_slot": 10, "player_id": None},
-    {"overall_pick": 12, "round": 2, "team_slot": 9, "player_id": None},
-    {"overall_pick": 13, "round": 2, "team_slot": 8, "player_id": None},
-    {"overall_pick": 14, "round": 2, "team_slot": 7, "player_id": None},
-    {"overall_pick": 15, "round": 2, "team_slot": 6, "player_id": None},
-    {"overall_pick": 16, "round": 2, "team_slot": 5, "player_id": None},
-    {"overall_pick": 17, "round": 2, "team_slot": 4, "player_id": None},
-    {"overall_pick": 18, "round": 2, "team_slot": 3, "player_id": None},
-    {"overall_pick": 19, "round": 2, "team_slot": 2, "player_id": None},
-    {"overall_pick": 20, "round": 2, "team_slot": 1, "player_id": None},
-    # round 3 (snake: slots 1..10)
-    {"overall_pick": 21, "round": 3, "team_slot": 1, "player_id": None},
-    {"overall_pick": 22, "round": 3, "team_slot": 2, "player_id": None},
-    {"overall_pick": 23, "round": 3, "team_slot": 3, "player_id": None},
-    {"overall_pick": 24, "round": 3, "team_slot": 4, "player_id": None},
-    {"overall_pick": 25, "round": 3, "team_slot": 5, "player_id": None},
-    {"overall_pick": 26, "round": 3, "team_slot": 6, "player_id": None},
-    {"overall_pick": 27, "round": 3, "team_slot": 7, "player_id": None},
-    {"overall_pick": 28, "round": 3, "team_slot": 8, "player_id": None},
-    {"overall_pick": 29, "round": 3, "team_slot": 9, "player_id": None},
-    {"overall_pick": 30, "round": 3, "team_slot": 10, "player_id": None},
-    # round 4 (snake: slots 10..1)
-    {"overall_pick": 31, "round": 4, "team_slot": 10, "player_id": None},
-    {"overall_pick": 32, "round": 4, "team_slot": 9, "player_id": None},
-    {"overall_pick": 33, "round": 4, "team_slot": 8, "player_id": None},
-    {"overall_pick": 34, "round": 4, "team_slot": 7, "player_id": None},
-    {"overall_pick": 35, "round": 4, "team_slot": 6, "player_id": None},
-    {"overall_pick": 36, "round": 4, "team_slot": 5, "player_id": "4014806"}, #Ben Keeper Allem 4th
-    {"overall_pick": 37, "round": 4, "team_slot": 4, "player_id": None},
-    {"overall_pick": 38, "round": 4, "team_slot": 3, "player_id": None},
-    {"overall_pick": 39, "round": 4, "team_slot": 2, "player_id": None},
-    {"overall_pick": 40, "round": 4, "team_slot": 1, "player_id": None},
-    # round 5 (snake: slots 1..10)
-    {"overall_pick": 41, "round": 5, "team_slot": 1, "player_id": "3473794"}, #Drew Keeper McBride 5th
-    {"overall_pick": 42, "round": 5, "team_slot": 2, "player_id": None},
-    {"overall_pick": 43, "round": 5, "team_slot": 3, "player_id": None},
-    {"overall_pick": 44, "round": 5, "team_slot": 4, "player_id": "3313410"}, #Jaxon Keeper Kittle 5th
-    {"overall_pick": 45, "round": 5, "team_slot": 5, "player_id": None},
-    {"overall_pick": 46, "round": 5, "team_slot": 6, "player_id": "2793061"}, # Grayson Keeper Nabers 5th
-    {"overall_pick": 47, "round": 5, "team_slot": 7, "player_id": None},
-    {"overall_pick": 48, "round": 5, "team_slot": 8, "player_id": None},
-    {"overall_pick": 49, "round": 5, "team_slot": 9, "player_id": None},
-    {"overall_pick": 50, "round": 5, "team_slot": 10, "player_id": None},
-    # round 6 (snake: slots 10..1)
-    {"overall_pick": 51, "round": 6, "team_slot": 10, "player_id": None},
-    {"overall_pick": 52, "round": 6, "team_slot": 9, "player_id": None},
-    {"overall_pick": 53, "round": 6, "team_slot": 8, "player_id": None},
-    {"overall_pick": 54, "round": 6, "team_slot": 7, "player_id": None},
-    {"overall_pick": 55, "round": 6, "team_slot": 6, "player_id": None},
-    {"overall_pick": 56, "round": 6, "team_slot": 5, "player_id": None},
-    {"overall_pick": 57, "round": 6, "team_slot": 4, "player_id": None},
-    {"overall_pick": 58, "round": 6, "team_slot": 3, "player_id": None},
-    {"overall_pick": 59, "round": 6, "team_slot": 2, "player_id": None},
-    {"overall_pick": 60, "round": 6, "team_slot": 1, "player_id": None},
-    # round 7 (snake: slots 1..10)
-    {"overall_pick": 61, "round": 7, "team_slot": 1, "player_id": None},
-    {"overall_pick": 62, "round": 7, "team_slot": 2, "player_id": None},
-    {"overall_pick": 63, "round": 7, "team_slot": 3, "player_id": None},
-    {"overall_pick": 64, "round": 7, "team_slot": 4, "player_id": None},
-    {"overall_pick": 65, "round": 7, "team_slot": 5, "player_id": None},
-    {"overall_pick": 66, "round": 7, "team_slot": 6, "player_id": None},
-    {"overall_pick": 67, "round": 7, "team_slot": 7, "player_id": None},
-    {"overall_pick": 68, "round": 7, "team_slot": 8, "player_id": None},
-    {"overall_pick": 69, "round": 7, "team_slot": 9, "player_id": None},
-    {"overall_pick": 70, "round": 7, "team_slot": 10, "player_id": None},
-    # round 8 (snake: slots 10..1)
-    {"overall_pick": 71, "round": 8, "team_slot": 10, "player_id": None},
-    {"overall_pick": 72, "round": 8, "team_slot": 9, "player_id": "7465604"}, # Steve Keeper J Daniels 8th
-    {"overall_pick": 73, "round": 8, "team_slot": 8, "player_id": "6922949"}, # Russ Keeper NJigba 8th
-    {"overall_pick": 74, "round": 8, "team_slot": 7, "player_id": None}, 
-    {"overall_pick": 75, "round": 8, "team_slot": 6, "player_id": None},
-    {"overall_pick": 76, "round": 8, "team_slot": 5, "player_id": None},
-    {"overall_pick": 77, "round": 8, "team_slot": 4, "player_id": None},
-    {"overall_pick": 78, "round": 8, "team_slot": 3, "player_id": None},
-    {"overall_pick": 79, "round": 8, "team_slot": 2, "player_id": None},
-    {"overall_pick": 80, "round": 8, "team_slot": 1, "player_id": None},
-    # round 9 (snake: slots 1..10)
-    {"overall_pick": 81, "round": 9, "team_slot": 1, "player_id": None},
-    {"overall_pick": 82, "round": 9, "team_slot": 2, "player_id": None},
-    {"overall_pick": 83, "round": 9, "team_slot": 3, "player_id": "6006621"}, # Rory Keeper Baker 9th
-    {"overall_pick": 84, "round": 9, "team_slot": 4 ,"player_id": None},
-    {"overall_pick": 85, "round": 9, "team_slot": 5, "player_id": None},
-    {"overall_pick": 86, "round": 9, "team_slot": 6, "player_id": None},
-    {"overall_pick": 87, "round": 9, "team_slot": 7, "player_id": None},
-    {"overall_pick": 88, "round": 9, "team_slot": 8, "player_id": None},
-    {"overall_pick": 89, "round": 9, "team_slot": 9, "player_id": None},
-    {"overall_pick": 90, "round": 9, "team_slot": 10, "player_id": "4488657"}, # Bryson Keeper Irving 9th
-    # round 10 (snake: slots 10..1)
-    {"overall_pick": 91, "round": 10, "team_slot": 10, "player_id": None},
-    {"overall_pick": 92, "round": 10, "team_slot": 9, "player_id": None},
-    {"overall_pick": 93, "round": 10, "team_slot": 8, "player_id": None},
-    {"overall_pick": 94, "round": 10, "team_slot": 7, "player_id": "4330861"}, # Daniel Keeper BTJ 10th
-    {"overall_pick": 95, "round": 10, "team_slot": 6, "player_id": None},
-    {"overall_pick": 96, "round": 10, "team_slot": 5, "player_id": None},
-    {"overall_pick": 97, "round": 10, "team_slot": 4, "player_id": None},
-    {"overall_pick": 98, "round": 10, "team_slot": 3, "player_id": None},
-    {"overall_pick": 99, "round": 10, "team_slot": 2, "player_id": "1470696"}, # Alex Keeper Bowers 10th
-    {"overall_pick": 100, "round": 10, "team_slot": 1, "player_id": None}, 
-    # round 11 (snake: slots 1..10)
-    {"overall_pick": 101, "round": 11, "team_slot": 1, "player_id": None},
-    {"overall_pick": 102, "round": 11, "team_slot": 2, "player_id": None},
-    {"overall_pick": 103, "round": 11, "team_slot": 3, "player_id": None},
-    {"overall_pick": 104, "round": 11, "team_slot": 4, "player_id": None},
-    {"overall_pick": 105, "round": 11, "team_slot": 5, "player_id": None},
-    {"overall_pick": 106, "round": 11, "team_slot": 6, "player_id": None},
-    {"overall_pick": 107, "round": 11, "team_slot": 7, "player_id": None},
-    {"overall_pick": 108, "round": 11, "team_slot": 8, "player_id": None},
-    {"overall_pick": 109, "round": 11, "team_slot": 9, "player_id": None},
-    {"overall_pick": 110, "round": 11, "team_slot": 10, "player_id": None},
-    # round 12 (snake: slots 10..1)
-    {"overall_pick": 111, "round": 12, "team_slot": 10, "player_id": None},
-    {"overall_pick": 112, "round": 12, "team_slot": 9, "player_id": None},
-    {"overall_pick": 113, "round": 12, "team_slot": 8, "player_id": None},
-    {"overall_pick": 114, "round": 12, "team_slot": 7, "player_id": None},
-    {"overall_pick": 115, "round": 12, "team_slot": 6, "player_id": None},
-    {"overall_pick": 116, "round": 12, "team_slot": 5, "player_id": None},
-    {"overall_pick": 117, "round": 12, "team_slot": 4, "player_id": None},
-    {"overall_pick": 118, "round": 12, "team_slot": 3, "player_id": None},
-    {"overall_pick": 119, "round": 12, "team_slot": 2, "player_id": None},
-    {"overall_pick": 120, "round": 12, "team_slot": 1, "player_id": None},
-    # round 13 (snake: slots 1..10)
-    {"overall_pick": 121, "round": 13, "team_slot": 1, "player_id": None},
-    {"overall_pick": 122, "round": 13, "team_slot": 2, "player_id": None},
-    {"overall_pick": 123, "round": 13, "team_slot": 3, "player_id": None},
-    {"overall_pick": 124, "round": 13, "team_slot": 4, "player_id": None},
-    {"overall_pick": 125, "round": 13, "team_slot": 5, "player_id": None},
-    {"overall_pick": 126, "round": 13, "team_slot": 6, "player_id": None},
-    {"overall_pick": 127, "round": 13, "team_slot": 7, "player_id": None},
-    {"overall_pick": 128, "round": 13, "team_slot": 8, "player_id": None},
-    {"overall_pick": 129, "round": 13, "team_slot": 9, "player_id": None},
-    {"overall_pick": 130, "round": 13, "team_slot": 10, "player_id": None},
-    # round 14 (snake: slots 10..1)
-    {"overall_pick": 131, "round": 14, "team_slot": 10, "player_id": None},
-    {"overall_pick": 132, "round": 14, "team_slot": 9, "player_id": None},
-    {"overall_pick": 133, "round": 14, "team_slot": 8, "player_id": None},
-    {"overall_pick": 134, "round": 14, "team_slot": 7, "player_id": None},
-    {"overall_pick": 135, "round": 14, "team_slot": 6, "player_id": None},
-    {"overall_pick": 136, "round": 14, "team_slot": 5, "player_id": None},
-    {"overall_pick": 137, "round": 14, "team_slot": 4, "player_id": None},
-    {"overall_pick": 138, "round": 14, "team_slot": 3, "player_id": None},
-    {"overall_pick": 139, "round": 14, "team_slot": 2, "player_id": None},
-    {"overall_pick": 140, "round": 14, "team_slot": 1, "player_id": None},
-])
-
-draft_log_df = pd.concat([draft_log_template, demo_draft_log], ignore_index=True)
-	# Fill the rest of the grid (None player_id) up to num_teams*num_rounds
-	df = pd.DataFrame(rows)
+def default_draft_log() -> pd.DataFrame:
+	# Build full snake grid
 	num_teams = default_settings["num_teams"]
 	num_rounds = default_settings["num_rounds"]
 	max_picks = num_teams * num_rounds
-	if df["overall_pick"].max() < max_picks:
-		all_rows = []
-		for pick in range(1, max_picks + 1):
-			if pick in df["overall_pick"].values:
-				all_rows.append(df[df["overall_pick"] == pick].iloc[0].to_dict())
-			else:
-				r = (pick - 1) // num_teams + 1
-				if r % 2 == 1:
-					team_slot = pick - (r - 1) * num_teams
-				else:
-					team_slot = num_teams - (pick - (r - 1) * num_teams) + 1
-				all_rows.append({"overall_pick": pick, "round": r, "team_slot": team_slot, "player_id": None})
-		df = pd.DataFrame(all_rows)
-	return df[["overall_pick", "round", "team_slot", "player_id"]].sort_values("overall_pick").reset_index(drop=True)
+
+	rows = []
+	for pick in range(1, max_picks + 1):
+		r = (pick - 1) // num_teams + 1
+		if r % 2 == 1:
+			team_slot = pick - (r - 1) * num_teams
+		else:
+			team_slot = num_teams - (pick - (r - 1) * num_teams) + 1
+		rows.append({"overall_pick": pick, "round": r, "team_slot": team_slot, "player_id": None})
+
+	df = pd.DataFrame(rows)
+
+	# Apply your predefined draft log (keepers and fixed picks)
+	pre_filled = {
+		36: "4014806",
+		41: "3473794",
+		44: "3313410",
+		46: "2793061",
+		72: "7465604",
+		73: "6922949",
+		83: "6006621",
+		90: "4488657",
+		94: "4330861",
+		99: "1470696",
+	}
+	for pick, pid in pre_filled.items():
+		if 1 <= pick <= max_picks:
+			df.loc[df["overall_pick"] == pick, "player_id"] = str(pid)
+
+	# Ensure schema and ordering
+	df = df[["overall_pick", "round", "team_slot", "player_id"]].sort_values("overall_pick").reset_index(drop=True)
+	return df
+
 
 def derive_roster_counts(draft_log: pd.DataFrame, players: pd.DataFrame, positions: List[str]) -> pd.DataFrame:
 	draft_log = draft_log.copy()
