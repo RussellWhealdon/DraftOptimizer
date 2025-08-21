@@ -37,7 +37,28 @@ with st.sidebar:
 	st.session_state.top_n = st.slider("Top N candidates", min_value=10, max_value=60, value=st.session_state.top_n, step=5)
 
 with st.expander("Draft Log"):
-	st.dataframe(st.session_state.draft_log_df, use_container_width=True, hide_index=True)
+    # Ensure normalized players (has 'name')
+    players_df = st.session_state.players_df.copy()
+    players_df["player_id"] = players_df["player_id"].astype(str)
+
+    # Prepare draft log for join
+    dl = st.session_state.draft_log_df.copy()
+    # Keep None as-is so they show as blank; only cast non-null IDs for matching
+    dl_ids = dl["player_id"].dropna().astype(str)
+    dl.loc[dl["player_id"].notna(), "player_id"] = dl_ids
+
+    # Join to get player names/pos
+    show_df = dl.merge(
+        players_df[["player_id", "name", "pos"]],
+        on="player_id",
+        how="left"
+    )
+
+    # Order and tidy columns
+    show_df = show_df[["overall_pick", "round", "team_slot", "player_id", "name", "pos"]]
+    show_df = show_df.rename(columns={"name": "player_name", "pos": "player_pos"})
+
+    st.dataframe(show_df, use_container_width=True, hide_index=True)
 
 avail_df = compute_availability(
 	players_df=st.session_state.players_df,
