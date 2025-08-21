@@ -87,7 +87,7 @@ else:
 		c[2].write(f"{row['Tier']}")
 		c[3].write(f"{row['ADP']:.0f}" if pd.notna(row["ADP"]) else "-")
 		c[4].write(f"{row['Proj_Points']:.1f}" if pd.notna(row["Proj_Points"]) else "-")
-		c[5].write(f"%{row['P_survive_to_next_pick']*100:.2f}")
+		c[5].write(f"{row['P_survive_to_next_pick']*100:.2f}%")
 		if c[8].button("Draft", key=f"draft_{row['player_id']}"):
 			st.session_state.draft_log_df = draft_player(st.session_state.draft_log_df, str(row["player_id"]))
 			st.rerun()
