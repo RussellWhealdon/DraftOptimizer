@@ -79,8 +79,6 @@ else:
 	cols[3].markdown("**ADP**")
 	cols[4].markdown("**Proj**")
 	cols[5].markdown("**P(survive)**")
-	cols[6].markdown("**ADP_Value**")
-	cols[7].markdown("**Proj_Value**")
 	cols[8].markdown("**Action**")
 	for _, row in avail_df.iterrows():
 		c = st.columns([2,1,1,1,1,1,1,1,1])
@@ -90,8 +88,6 @@ else:
 		c[3].write(f"{row['ADP']:.0f}" if pd.notna(row["ADP"]) else "-")
 		c[4].write(f"{row['Proj_Points']:.1f}" if pd.notna(row["Proj_Points"]) else "-")
 		c[5].write(f"{row['P_survive_to_next_pick']:.3f}")
-		c[6].write(f"{row['ADP_Value']:.2f}" if pd.notna(row["ADP_Value"]) else "-")
-		c[7].write(f"{row['Proj_Value']:.2f}" if pd.notna(row["Proj_Value"]) else "-")
 		if c[8].button("Draft", key=f"draft_{row['player_id']}"):
 			st.session_state.draft_log_df = draft_player(st.session_state.draft_log_df, str(row["player_id"]))
 			st.rerun()
