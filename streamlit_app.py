@@ -60,6 +60,91 @@ with st.expander("Draft Log"):
 
     st.dataframe(show_df, use_container_width=True, hide_index=True)
 
+with st.expander("Draft Log"):
+    # Ensure normalized players (has 'name')
+    players_df = st.session_state.players_df.copy()
+    players_df["player_id"] = players_df["player_id"].astype(str)
+
+    # Prepare draft log for join
+    dl = st.session_state.draft_log_df.copy()
+    # Keep None as-is so they show as blank; only cast non-null IDs for matching
+    dl_ids = dl["player_id"].dropna().astype(str)
+    dl.loc[dl["player_id"].notna(), "player_id"] = dl_ids
+
+    # Join to get player names/pos
+    show_df = dl.merge(
+        players_df[["player_id", "name", "pos"]],
+        on="player_id",
+        how="left"
+    )
+
+    # Order and tidy columns
+    show_df = show_df[["overall_pick", "round", "team_slot", "player_id", "name", "pos"]]
+    show_df = show_df.rename(columns={"name": "player_name", "pos": "player_pos"})
+
+    st.dataframe(show_df, use_container_width=True, hide_index=True)
+
+# Add My Drafted Team expander
+with st.expander("My Drafted Team"):
+    # Get all picks for my team
+    my_picks = st.session_state.draft_log_df[
+        (st.session_state.draft_log_df["team_slot"] == st.session_state.my_team_slot) & 
+        (st.session_state.draft_log_df["player_id"].notna())
+    ].copy()
+    
+    if my_picks.empty:
+        st.info("You haven't drafted any players yet.")
+    else:
+        # Join with player info to get names and positions
+        players_df = st.session_state.players_df.copy()
+        players_df["player_id"] = players_df["player_id"].astype(str)
+        
+        my_team_df = my_picks.merge(
+            players_df[["player_id", "name", "pos", "tier", "adp_overall", "proj_points"]],
+            on="player_id",
+            how="left"
+        )
+        
+        # Reorder columns and rename for display
+        my_team_df = my_team_df[["overall_pick", "round", "name", "pos", "tier", "adp_overall", "proj_points"]]
+        my_team_df = my_team_df.rename(columns={
+            "name": "Player Name",
+            "pos": "Position", 
+            "tier": "Tier",
+            "adp_overall": "ADP",
+            "proj_points": "Proj Points"
+        })
+        
+        # Sort by overall pick (draft order)
+        my_team_df = my_team_df.sort_values("overall_pick")
+        
+        # Display the team
+        st.dataframe(my_team_df, use_container_width=True, hide_index=True)
+        
+        # Show summary stats
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Players", len(my_team_df))
+        
+        with col2:
+            pos_counts = my_team_df["Position"].value_counts()
+            st.metric("Positions Filled", len(pos_counts))
+        
+        with col3:
+            if "ADP" in my_team_df.columns and not my_team_df["ADP"].isna().all():
+                avg_adp = my_team_df["ADP"].mean()
+                st.metric("Avg ADP", f"{avg_adp:.1f}")
+            else:
+                st.metric("Avg ADP", "N/A")
+        
+        with col4:
+            if "Proj Points" in my_team_df.columns and not my_team_df["Proj Points"].isna().all():
+                total_proj = my_team_df["Proj Points"].sum()
+                st.metric("Total Proj Points", f"{total_proj:.0f}")
+            else:
+                st.metric("Total Proj Points", "N/A")
+
 avail_df = compute_availability(
 	players_df=st.session_state.players_df,
 	draft_log_df=st.session_state.draft_log_df,
