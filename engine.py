@@ -358,18 +358,18 @@ def auto_draft_to_next_pick(
     draft_log_df: pd.DataFrame,
     settings: Dict,
     my_team_slot: int,
-    randomness_weight: float = 0.33
+    randomness_weight: float = 0.2
 ) -> pd.DataFrame:
     """
     Auto-draft players up to (but not including) your next pick.
-    Uses 67% projections + 33% randomness among top ~10 available players.
+    Uses 80% projections + 20% randomness among top ~10 available players.
     
     Args:
         players_df: Players DataFrame
         draft_log_df: Current draft log
         settings: League settings
         my_team_slot: Your team slot
-        randomness_weight: Weight for randomness (0.33 = 33% random, 67% projections)
+        randomness_weight: Weight for randomness (0.2 = 20% random, 80% projections)
     
     Returns:
         Updated draft_log_df with auto-drafted players
@@ -410,7 +410,7 @@ def auto_draft_to_next_pick(
         use_internal_market_pressure=True,
         market_top_k=24,
         use_internal_tier_pressure=True,
-        tier_bonus_if_last=0.30
+        tier_bonus_if_last=0.2
     )
     
     # Auto-draft each pick until your next turn
