@@ -152,3 +152,26 @@ else:
 		if c[8].button("Draft", key=f"draft_{row['player_id']}"):
 			st.session_state.draft_log_df = draft_player(st.session_state.draft_log_df, str(row["player_id"]))
 			st.rerun()
+
+# Add Auto-Draft button
+st.subheader("Auto-Draft Options")
+
+col1, col2 = st.columns([1, 3])
+
+with col1:
+    if st.button("Auto-Draft to My Next Pick", type="primary"):
+        try:
+            # Auto-draft up to your next pick
+            st.session_state.draft_log_df = auto_draft_to_next_pick(
+                players_df=st.session_state.players_df,
+                draft_log_df=st.session_state.draft_log_df,
+                settings=st.session_state.settings,
+                my_team_slot=st.session_state.my_team_slot
+            )
+            st.success("Auto-draft completed! Draft log updated.")
+            st.rerun()
+        except ValueError as e:
+            st.error(f"Cannot auto-draft: {str(e)}")
+
+with col2:
+    st.info("Auto-draft will simulate picks up to (but not including) your next turn. Uses 67% team needs + 33% randomness among top available players.")
