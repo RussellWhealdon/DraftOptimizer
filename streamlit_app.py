@@ -7,6 +7,7 @@ from engine import (
 	default_draft_log,
 	draft_player,
 	compute_availability,
+	auto_draft_to_next_pick
 )
 
 st.set_page_config(page_title="Draft Availability Optimizer", layout="wide")
