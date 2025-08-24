@@ -358,18 +358,18 @@ def auto_draft_to_next_pick(
     draft_log_df: pd.DataFrame,
     settings: Dict,
     my_team_slot: int,
-    randomness_weight: float = 0.2
+    randomness_weight: float = 0.1
 ) -> pd.DataFrame:
     """
     Auto-draft players up to (but not including) your next pick.
-    Uses 80% projections + 20% randomness among top ~10 available players.
+    Uses 80% projections +100% randomness among top ~10 available players.
     
     Args:
         players_df: Players DataFrame
         draft_log_df: Current draft log
         settings: League settings
         my_team_slot: Your team slot
-        randomness_weight: Weight for randomness (0.2 = 20% random, 80% projections)
+        randomness_weight: Weight for randomness (0.1 = 10% random, 90% projections)
     
     Returns:
         Updated draft_log_df with auto-drafted players
