@@ -351,3 +351,144 @@ def compute_availability(
 		})
 
 	return pd.DataFrame(results).sort_values("P_survive_to_next_pick", ascending=True)
+
+
+def auto_draft_to_next_pick(
+    players_df: pd.DataFrame,
+    draft_log_df: pd.DataFrame,
+    settings: Dict,
+    my_team_slot: int,
+    randomness_weight: float = 0.33
+) -> pd.DataFrame:
+    """
+    Auto-draft players up to (but not including) your next pick.
+    Uses 67% projections + 33% randomness among top ~10 available players.
+    
+    Args:
+        players_df: Players DataFrame
+        draft_log_df: Current draft log
+        settings: League settings
+        my_team_slot: Your team slot
+        randomness_weight: Weight for randomness (0.33 = 33% random, 67% projections)
+    
+    Returns:
+        Updated draft_log_df with auto-drafted players
+    """
+    # Check if it's currently your pick
+    current_pick = draft_log_df[draft_log_df['player_id'].isna()]['overall_pick'].min()
+    my_pick_slots = get_team_pick_slots(my_team_slot, settings['num_teams'], settings['num_rounds'])
+    
+    if current_pick in my_pick_slots:
+        raise ValueError("Cannot auto-draft when it's currently your pick!")
+    
+    # Find your next pick
+    my_next_pick = None
+    for pick_num in sorted(my_pick_slots):
+        if pick_num > current_pick:
+            pick_row = draft_log_df[draft_log_df['overall_pick'] == pick_num]
+            if not pick_row.empty and pd.isna(pick_row.iloc[0]['player_id']):
+                my_next_pick = pick_num
+                break
+    
+    if my_next_pick is None:
+        raise ValueError("Could not find your next pick")
+    
+    # Get remaining players
+    players = normalize_players(players_df)
+    drafted_players = draft_log_df[draft_log_df['player_id'].notna()]['player_id'].astype(str).tolist()
+    players['player_id'] = players['player_id'].astype(str)
+    remaining_players = players[~players['player_id'].isin(drafted_players)].copy()
+    
+    # Get current roster counts and propensities
+    positions = settings.get("positions", ["QB", "RB", "WR", "TE", "K", "DEF"])
+    roster_counts = derive_roster_counts(draft_log_df, players, positions)
+    propensities = compute_needs_and_propensities(
+        roster_counts=roster_counts,
+        settings=settings,
+        players_df=players,
+        draft_log_df=draft_log_df,
+        use_internal_market_pressure=True,
+        market_top_k=24,
+        use_internal_tier_pressure=True,
+        tier_bonus_if_last=0.30
+    )
+    
+    # Auto-draft each pick until your next turn
+    updated_draft_log = draft_log_df.copy()
+    
+    for pick_num in range(current_pick, my_next_pick):
+        # Get team picking at this slot
+        round_num = (pick_num - 1) // settings['num_teams'] + 1
+        if round_num % 2 == 1:  # Odd rounds
+            team_picking = pick_num - (round_num - 1) * settings['num_teams']
+        else:  # Even rounds
+            team_picking = settings['num_teams'] - (pick_num - (round_num - 1) * settings['num_teams']) + 1
+        
+        # Get that team's propensities
+        team_props = propensities[propensities['team_slot'] == team_picking].iloc[0]
+        
+        # Get available players at this pick
+        available_at_pick = remaining_players.copy()
+        
+        # Sort by ADP for ranking
+        adp_col = 'adp_overall' if 'adp_overall' in available_at_pick.columns else ('ADP' if 'ADP' in available_at_pick.columns else None)
+        if adp_col:
+            available_at_pick = available_at_pick.sort_values(adp_col)
+        
+        # Take top ~10 players for consideration
+        top_candidates = available_at_pick.head(10)
+        
+        # Calculate pick probabilities
+        pick_probs = []
+        for _, player in top_candidates.iterrows():
+            pos_col = 'pos' if 'pos' in player else 'Pos'
+            pos_value = player[pos_col]
+            
+            # Base probability from positional need
+            pos_propensity = team_props[f"propensity_{pos_value}"]
+            
+            # ADP ranking factor (better rank = higher probability)
+            if adp_col:
+                rank_factor = 1.0 / (available_at_pick.index.get_loc(player.name) + 1) ** 0.5
+            else:
+                rank_factor = 1.0
+            
+            # Combine projection and randomness
+            projection_score = pos_propensity * rank_factor
+            random_score = np.random.random()
+            
+            # Weighted combination
+            final_score = (1 - randomness_weight) * projection_score + randomness_weight * random_score
+            pick_probs.append(final_score)
+        
+        # Normalize probabilities
+        total_prob = sum(pick_probs)
+        if total_prob > 0:
+            pick_probs = [p / total_prob for p in pick_probs]
+        else:
+            pick_probs = [1.0 / len(pick_probs)] * len(pick_probs)
+        
+        # Select player based on probabilities
+        selected_idx = np.random.choice(len(top_candidates), p=pick_probs)
+        selected_player = top_candidates.iloc[selected_idx]
+        
+        # Update draft log
+        updated_draft_log.loc[updated_draft_log['overall_pick'] == pick_num, 'player_id'] = selected_player['player_id']
+        
+        # Remove drafted player from remaining pool
+        remaining_players = remaining_players[remaining_players['player_id'] != selected_player['player_id']]
+        
+        # Update roster counts and propensities for next pick
+        roster_counts = derive_roster_counts(updated_draft_log, players, positions)
+        propensities = compute_needs_and_propensities(
+            roster_counts=roster_counts,
+            settings=settings,
+            players_df=players,
+            draft_log_df=updated_draft_log,
+            use_internal_market_pressure=True,
+            market_top_k=24,
+            use_internal_tier_pressure=True,
+            tier_bonus_if_last=0.30
+        )
+    
+    return updated_draft_log
