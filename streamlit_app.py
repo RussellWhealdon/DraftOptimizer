@@ -143,7 +143,7 @@ with col1:
             st.error(f"Cannot auto-draft: {str(e)}")
 
 with col2:
-    st.info("Auto-draft will simulate picks up to (but not including) your next turn. Uses 67% team needs + 33% randomness among top available players.")
+    st.info("Auto-draft will simulate picks up to (but not including) your next turn. Uses 90% team needs + 10% randomness among top available players.")
 
 
 avail_df = compute_availability(
